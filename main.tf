@@ -1,53 +1,40 @@
-# Phase 1: the simplest thing that serves the site.
-# A single S3 bucket with static website hosting (HTTP, no custom domain).
-# Website hosting resolves index.html inside subfolders automatically, which is
-# exactly what Astro's directory-style output (/cases/<slug>/index.html) needs.
-#
-# Phase 2 (next): put CloudFront + ACM (us-east-1) + Route53 in front for HTTPS
-# and the nicolasandrescalvo.com domain, and lock the bucket down behind an OAC.
+# The site bucket. Private: only CloudFront may read it, via Origin Access Control.
+# (Phase 1 served this bucket as a public website; phase 2 locks it down.)
 
 resource "aws_s3_bucket" "site" {
   bucket = var.bucket_name
   tags   = var.tags
 }
 
-resource "aws_s3_bucket_website_configuration" "site" {
-  bucket = aws_s3_bucket.site.id
-
-  index_document {
-    suffix = "index.html"
-  }
-
-  error_document {
-    key = "404.html"
-  }
-}
-
-# Static website hosting requires the objects to be publicly readable.
 resource "aws_s3_bucket_public_access_block" "site" {
-  bucket = aws_s3_bucket.site.id
-
+  bucket                  = aws_s3_bucket.site.id
   block_public_acls       = true
-  block_public_policy     = false
+  block_public_policy     = true
   ignore_public_acls      = true
-  restrict_public_buckets = false
+  restrict_public_buckets = true
 }
 
-data "aws_iam_policy_document" "public_read" {
+# Allow only this CloudFront distribution to read objects.
+data "aws_iam_policy_document" "site" {
   statement {
-    sid       = "PublicReadGetObject"
+    sid       = "AllowCloudFrontRead"
     actions   = ["s3:GetObject"]
     resources = ["${aws_s3_bucket.site.arn}/*"]
 
     principals {
-      type        = "AWS"
-      identifiers = ["*"]
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.site.arn]
     }
   }
 }
 
 resource "aws_s3_bucket_policy" "site" {
-  bucket     = aws_s3_bucket.site.id
-  policy     = data.aws_iam_policy_document.public_read.json
-  depends_on = [aws_s3_bucket_public_access_block.site]
+  bucket = aws_s3_bucket.site.id
+  policy = data.aws_iam_policy_document.site.json
 }
