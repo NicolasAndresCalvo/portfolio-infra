@@ -1,0 +1,43 @@
+name: Terraform
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - run: terraform fmt -check
+      - run: terraform init
+      - run: terraform validate
+
+      - name: Plan
+        if: github.event_name == 'pull_request'
+        run: terraform plan -no-color
+
+      # Apply on merge to main. Requires a remote backend (see versions.tf) so CI
+      # shares state. Until the backend is enabled, run apply locally instead.
+      - name: Apply
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply -auto-approve
+
+# Required GitHub config (Settings > Secrets and variables > Actions):
+#   secret  AWS_TERRAFORM_ROLE_ARN   arn:aws:iam::<acct>:role/portfolio-infra-ci
+#   var     AWS_REGION               eu-west-1
