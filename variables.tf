@@ -5,9 +5,15 @@ variable "aws_region" {
 }
 
 variable "bucket_name" {
-  description = "Globally-unique S3 bucket name for the static site (phase 1, just a test)."
+  description = "Globally-unique S3 bucket name for the static site."
   type        = string
   default     = "nicolasandrescalvo-portfolio"
+}
+
+variable "domain_name" {
+  description = "Apex domain. Must already have a public hosted zone in Route53."
+  type        = string
+  default     = "nicolasandrescalvo.com"
 }
 
 variable "tags" {
@@ -17,4 +23,9 @@ variable "tags" {
     Project   = "portfolio-site"
     ManagedBy = "terraform"
   }
+}
+
+locals {
+  www_domain = "www.${var.domain_name}"
+  aliases    = [var.domain_name, local.www_domain]
 }

@@ -1,9 +1,13 @@
 output "bucket" {
-  description = "Name of the site bucket (used by scripts/deploy.sh)."
+  description = "Name of the site bucket (used by the web deploy pipeline)."
   value       = aws_s3_bucket.site.id
 }
 
-output "website_endpoint" {
-  description = "Open this in a browser after running scripts/deploy.sh."
-  value       = "http://${aws_s3_bucket_website_configuration.site.website_endpoint}"
+output "cloudfront_distribution_id" {
+  description = "Set as AWS_S3_BUCKET's companion CLOUDFRONT_DISTRIBUTION_ID in portfolio-web."
+  value       = aws_cloudfront_distribution.site.id
+}
+
+output "site_url" {
+  value = "https://${var.domain_name}"
 }
