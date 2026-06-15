@@ -1,40 +1,61 @@
-# portfolio-infra
+# ☁️ portfolio-infra
 
-Terraform for the AWS hosting of [`portfolio-web`](../portfolio-web).
+The AWS infrastructure for my portfolio site, as Terraform. It hosts
+[`portfolio-web`](https://github.com/NicolasAndresCalvo/portfolio-web), and the pipeline is
+the only thing that applies it.
 
-## Phase 1 (current) — basic test
+## 🗺️ The architecture (and index)
 
-A single S3 bucket with static website hosting. HTTP only, no custom domain. The goal is
-to get the site live and confirm the pipeline end to end.
-
-### Prerequisites
-
-- AWS credentials configured (`aws sts get-caller-identity` must work).
-- `bucket_name` must be globally unique. Override it if the default is taken: create
-  `terraform.tfvars` with `bucket_name = "something-unique"`.
-
-### Deploy
-
-```bash
-terraform init
-terraform apply          # creates the bucket, prints the website_endpoint
-
-# then, from the portfolio-web repo:
-AWS_S3_BUCKET=$(terraform output -raw bucket) ../portfolio-web/scripts/deploy.sh
+```mermaid
+flowchart TB
+  USER["👀  Visitor"] --> R53["Route53<br/>nicolasandrescalvo.com"]
+  R53 --> CF["CloudFront + ACM (HTTPS)"]
+  CF -->|"OAC"| S3["S3 (private bucket)"]
+  subgraph CI["⚙️  GitHub Actions (OIDC, no static keys)"]
+    PLAN["terraform plan (PR)"] --> APPLY["terraform apply (main)"]
+  end
+  APPLY --> CF
+  APPLY --> S3
+  STATE["S3 backend + DynamoDB lock"] -.shared state.- APPLY
 ```
 
-Open the printed `website_endpoint`. To tear everything down: `terraform destroy`.
+Phase 1 (current) is just the `S3` box. Phase 2 adds `CloudFront`, `ACM` and `Route53`.
 
-## Phase 2 (next) — production
+## 🧭 In plain terms
 
-CloudFront + ACM (certificate in `us-east-1`) + Route53 for HTTPS and the
-`nicolasandrescalvo.com` domain, S3 locked behind an Origin Access Control (no longer
-public), a CloudFront Function to rewrite directory paths to `index.html`, a remote S3
-state backend, and OIDC roles so CI can apply. See [`docs/roadmap.md`](./docs/roadmap.md).
+The site is static files in a bucket. A CDN puts them behind HTTPS and my domain. Nobody
+runs `terraform apply` by hand: I open a PR, the pipeline shows the plan, and merging to
+`main` applies it, authenticating to AWS with a short-lived OIDC role (no stored keys).
 
-## CI
+## 🧱 Phases
 
-`.github/workflows/terraform.yml` runs fmt/validate/plan on PRs and apply on `main` via
-AWS OIDC. CI apply requires the remote backend (phase 2); until then, apply locally.
+| Phase | What | Status |
+|-------|------|--------|
+| 1 | S3 static website (HTTP, no domain) | ✅ live |
+| 2 | CloudFront + ACM + Route53 (HTTPS + domain), bucket private behind OAC | ⏳ next |
 
-> This repo is **public**: never commit `*.tfstate`, `*.tfvars`, credentials or account ids.
+See [`docs/roadmap.md`](./docs/roadmap.md) for the full phase-2 checklist.
+
+## 🧩 What's inside
+
+| Path | What |
+|------|------|
+| `*.tf` | the live infrastructure (S3 today, CloudFront/ACM/Route53 next) |
+| `bootstrap/` | one-time, local: state backend + GitHub OIDC provider + CI roles |
+| `.github/workflows/terraform.yml` | CI: fmt/validate/plan on PR, apply on `main` |
+| `docs/roadmap.md` | phase-2 plan |
+
+## 🚀 Workflow (GitOps)
+
+```bash
+# 1. change a .tf on a branch, open a PR  → CI runs `terraform plan`
+# 2. merge to main                        → CI runs `terraform apply` (OIDC)
+```
+
+The one exception is `bootstrap/`: it creates the very state backend and roles the pipeline
+needs, so it is applied once, locally, with the `min` AWS profile. Everything else is the pipeline.
+
+## 🔒 Public repo hygiene
+
+No `*.tfstate`, no `*.tfvars`, no credentials, no account ids in code. State lives in the
+encrypted S3 backend; everything else is variables.
