@@ -14,6 +14,9 @@ permissions:
 jobs:
   terraform:
     runs-on: ubuntu-latest
+    # Skips cleanly until AWS CI is wired up. Set repo variable CI_ENABLED=true
+    # (and AWS_TERRAFORM_ROLE_ARN / AWS_REGION) to turn this on.
+    if: vars.CI_ENABLED == 'true'
     steps:
       - uses: actions/checkout@v4
 
