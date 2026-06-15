@@ -7,12 +7,13 @@ terraform {
     }
   }
 
-  # Phase 2: switch to a remote S3 backend once you have a state bucket.
-  # backend "s3" {
-  #   bucket = "nicolasandrescalvo-tfstate"
-  #   key    = "portfolio-site/terraform.tfstate"
-  #   region = "eu-west-1"
-  # }
+  backend "s3" {
+    bucket         = "nicolasandrescalvo-tfstate"
+    key            = "portfolio-site/terraform.tfstate"
+    region         = "eu-west-1"
+    dynamodb_table = "terraform-locks"
+    encrypt        = true
+  }
 }
 
 provider "aws" {
